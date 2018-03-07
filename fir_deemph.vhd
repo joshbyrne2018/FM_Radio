@@ -9,9 +9,11 @@ use work.CoArray_pkg.all;
 entity fir_deemph is
 generic(
 constant DECIMATION : integer := 1;
+constant QUANT_VAL : integer := 10;
 constant Taps : integer := 8;
 constant ValSize : integer := 10;
-constant X_Coeff,Y_Coeff : CoArray
+constant X_Coeff: CoArray;
+constant Y_Coeff: CoArray
 );
 port(
 signal clock : in std_logic;
@@ -35,15 +37,15 @@ signal state_one_counter : integer := DECIMATION-1;
 signal read_next, write_next : std_logic;
 
 function DEQUANTIZE (val_in : std_logic_vector(31 downto 0))
-  return std_logic_vector(31 downto 0) is
+  return std_logic_vector is
 begin
-  return std_logic_vector(shift_right(to_unsigned(val_in, 32),QUANT_VAL));
+  return std_logic_vector(shift_right(unsigned(val_in),QUANT_VAL));
 end DEQUANTIZE;
 
 function QUANTIZE (val_in : std_logic_vector(31 downto 0))
-  return std_logic_vector(31 downto 0) is
+  return std_logic_vector is
 begin
-  return std_logic_vector(shift_left(to_unsigned(val_in,32), QUANT_VAL));
+  return std_logic_vector(shift_left(unsigned(val_in), QUANT_VAL));
 end QUANTIZE;
 
 
@@ -81,8 +83,8 @@ case (state) is
 	end loop;
 	when s3 =>
 	for I in 0 to Taps-1 loop
-	y_temp <=  y_temp + DEQUANTIZE(signed(X_Coeff(Taps - I - 1))*signed(X_buffer(I))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
-	y_temp_b <=  y_temp_b + DEQUANTIZE(signed(Y_Coeff(Taps - I - 1))*signed(Y_buffer(I)));
+	y_temp <=  std_logic_vector(signed(y_temp) + signed(DEQUANTIZE(std_logic_vector(X_Coeff(Taps - I - 1)*signed(X_buffer(I)))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+	y_temp_b <=  std_logic_vector(signed(y_temp_b) + signed(DEQUANTIZE(std_logic_vector(Y_Coeff(Taps - I - 1)*signed(Y_buffer(I))))));
 	end loop;
 	y_next <= y_temp + y_temp_b;
 	next_state <= s4;
