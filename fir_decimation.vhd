@@ -47,6 +47,8 @@ begin
 end QUANTIZE;
 
 
+
+
 begin
 
 fir_fsm_process : process(state)
@@ -73,7 +75,7 @@ case (state) is
 	end if;
 	when s2 =>
 	for I in 0 to Taps-1 loop
-	y_temp <=  y_next + DEQUANTIZE(signed(coeff(Taps - I - 1))*signed(X_buffer(I))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION
+	y_temp <=  y_temp + DEQUANTIZE(signed(coeff(Taps - I - 1))*signed(X_buffer(I))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
 	end loop;
 	y_next <= y_temp;
 	next_state <= s3;
