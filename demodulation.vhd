@@ -11,13 +11,17 @@ generic (
   quad3 --3*PI/4
 );
 port (
-  clk : in std_logic;
+  clock : in std_logic;
   reset : in std_logic;
   real_in : in std_logic_vector(31 downto 0);
   imag : in std_logic_vector(31 downto 0);
   real_prev : in std_logic_vector(31 downto 0);
   imag_prev : in std_logic_vector(31 downto 0);
-  demod_out : out std_logic_vector(31 downto 0)
+  demod_out : out std_logic_vector(31 downto 0);
+  fifo_in_empty : in std_logic;
+  fifo_in_rd_en : in std_logic;
+  fifo_out_wr_en : out std_logic;
+  fifo_out_full : out std_logic
   -- NEED TO SHIFT REAL_PREV AND IMAG_PREV OUTSIDE OF THIS FUNCTION CALL
 );
 end entity demodulation;
@@ -32,15 +36,15 @@ component divider is
 		clk			: in std_logic;
 		start 		: in std_logic;
 		reset		: in std_logic;
-        dividend 	: in std_logic_vector(DIVIDEND_WIDTH - 1 downto 0);
-        divisor 	: in std_logic_vector(DIVISOR_WIDTH - 1 downto 0);
+    dividend 	: in std_logic_vector(DIVIDEND_WIDTH - 1 downto 0);
+    divisor 	: in std_logic_vector(DIVISOR_WIDTH - 1 downto 0);
 
 	--Outputs
 		quotient 	: out std_logic_vector (DIVIDEND_WIDTH - 1 downto 0);
 		remainder : out std_logic_vector (DIVISOR_WIDTH - 1 downto 0);
-		overflow 	: out std_logic
+		overflow 	: out std_logic;
+    divider_done : out std_logic
 		);
-
 end component divider;
 
 
@@ -71,6 +75,9 @@ signal remainder : std_logic_vector(31 downto 0);
 signal overflow : std_logic;
 signal angle : std_logic_vector(31 downto 0);
 signal angle_adjusted : std_logic_vector(31 downto 0);
+signal divider_done : std_logic;
+type states is (read_in, divide, write_out);
+signal state, state_c : states;
 
 begin
     r <= std_logic_vector(to_signed(DEQUANTIZE(to_signed((real_prev,32)*
@@ -87,15 +94,16 @@ begin
     start <= '1';
     -- NEED TO PERFORM DIVISION FOR ARCTAN
     division_unit : divider
-    port map(
-      clk => clk,
+    port map (
+      clk => clock,
       start => start,
       reset => reset,
       dividend => dividend,
       divisor => divisor,
       quotient => r_div,
       remainder => remainder,
-      overflow => overflow
+      overflow => overflow,
+      divider_done => divider_done
     );
 
 
@@ -124,5 +132,64 @@ begin
 
     demod_out <= DEQUANTIZE(std_logic_vector(gain*
       to_signed(angle_adjusted, 32)));
+
+    clock_process : process(clock, reset) is
+      begin
+      if (reset = '1') then
+        state <= read_in;
+        start <= '0';
+        fifo_in_rd_en <= '0';
+        fifo_out_wr_en_c <= '0';
+      elsif (rising_edge(clock)) then
+        state <= state_c;
+        start <= start_c;
+        fifo_in_rd_en <= fifo_in_rd_en_c;
+        fifo_out_wr_en <= fifo_out_wr_en_c;
+      end if;
+    end process clock_process;
+
+
+    state_process : process(state) is
+      begin
+      start_c <= start;
+      fifo_in_rd_en_c <= fifo_in_rd_en;
+      fifo_wr_en_c <= fifo_wr_en;
+
+      case (state) is
+        when (read_in) =>
+          fifo_wr_en_c <= '0';
+          if (fifo_in_empty = '0') then
+            fifo_in_rd_en_c <= '1';
+            start_c <= '1';
+            next_state <= divide;
+          else
+            fifo_in_rd_en <= '0';
+            start_c <= '0';
+            next_state <= read_in;
+          end if;
+
+        when (divide) =>
+          start_c <= '0';
+          fifo_wr_en_c <= '0';
+          fifo_in_rd_en_c <= '0';
+          if (divider_done = '1') then
+            next_state <= write_out;
+          else
+            next_state <= divide;
+          end if;
+
+        when (write_out) =>
+          start_c <= '0';
+          fifo_in_rd_en_c <= '0';
+          if (fifo_out_full = '0') then
+            next_state <= read_in;
+            fifo_out_wr_en_c <= '1';
+          else
+            fifo_out_wr_en <= '0';
+            next_state <= write_out;
+          end if;
+      end case;
+    end process state_process;
+
 
 end architecture behavioral;
