@@ -12,13 +12,13 @@ constant DECIMATION : integer := 1;
 constant QUANT_VAL : integer := 10;
 constant Taps : integer := 8;
 constant ValSize : integer := 10;
-constant Coeff : CoArray
+constant Coeff : CoArray(0 to 7) := (1,2,3,4,5,6,7,8)
 );
 port(
 signal clock : in std_logic;
 signal reset : in std_logic;
 signal empty_in : in std_logic;
-signal full_in : in std_logic;
+signal full_out : in std_logic;
 signal x_in : in std_logic_vector(ValSize-1 downto 0);
 signal y_out : out std_logic_vector(ValSize-1 downto 0);
 signal read_en : out std_logic;
@@ -52,37 +52,62 @@ end QUANTIZE;
 
 begin
 
-fir_fsm_process : process(state)
+fir_fsm_process : process(empty_in, state, full_out, y, x_buffer)
 begin
 
+next_state <= state;
+
 case (state) is
+	
 	when s0 =>
+	--y_out <= "1111111111";
 	for I in (Taps-DECIMATION-1) downto 0 loop
 	X_temp(I+DECIMATION) <= X_buffer(I);
 	end loop;
+	
 	X_buffer <= X_temp;
 	read_next <= '1';
-	next_state <= s1;
-	when s1 =>
-	X_buffer(state_one_counter) <= x_in;
-	if (state_one_counter = 0) then
-	next_state <= s2;
 	state_one_counter <= DECIMATION -1;
-	read_next <= '0';
-	else
 	next_state <= s1;
-	state_one_counter <= state_one_counter -1;
-	read_next <= '1';
-	end if;
+	
+	
+	when s1 =>
+		
+	if (empty_in = '0') then
+		--y_out <= "0101010101";
+		X_buffer(state_one_counter) <= x_in;
+		if (state_one_counter = 0) then
+		
+			next_state <= s2;
+			state_one_counter <= DECIMATION -1;
+			read_next <= '0';
+			
+		else
+			next_state <= s1;
+			state_one_counter <= state_one_counter -1;
+			read_next <= '1';
+			
+		end if;
+	else 
+		next_state <= s1;
+		read_next <= '1';
+	end if; 
+	
 	when s2 =>
+	y_temp <= "0000000000";
 	for I in 0 to Taps-1 loop
-	y_temp <=  std_logic_vector(signed(y_temp) + signed(DEQUANTIZE(std_logic_vector(coeff(Taps - I - 1)*signed(X_buffer(I)))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+	
+	y_next <=  std_logic_vector(signed(y_temp) + signed(DEQUANTIZE(std_logic_vector(to_signed(coeff(Taps - I - 1),10)*signed(X_buffer(I)))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+
+	y_temp <= y_next;
 	end loop;
-	y_next <= y_temp;
 	next_state <= s3;
+	
 	when s3 =>
-	y_out <= y;
-	write_en <= '1';
+	if(full_out = '0') then
+		y_out <= y;
+		write_en <= '1';
+	end if;
 	when OTHERS =>
 	next_state <= s0;
 
@@ -97,6 +122,10 @@ if (reset = '1') then
 y <= (others => '0');
 X_buffer <= (others => (others => '0'));
 state <= s0;
+read_en <= '0';
+write_en <= '0';
+read_next <= '0';
+write_next <= '0';
 elsif (rising_edge(clock)) then
 state <= next_state;
 y <= y_next;
