@@ -2,11 +2,6 @@ library IEEE;
 
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
-use WORK.divider_const.all;
-
---Additional standard or custom libraries go here
-
-
 
 entity divider is
 	generic (
@@ -25,7 +20,7 @@ entity divider is
 		quotient 	: out std_logic_vector (DIVIDEND_WIDTH - 1 downto 0);
 		remainder : out std_logic_vector (DIVISOR_WIDTH - 1 downto 0);
 		overflow 	: out std_logic;
-		divider_done : out std_logic;
+		divider_done : out std_logic
 		);
 
 end entity divider;
@@ -46,7 +41,7 @@ architecture fsm_behavior of divider is
 	signal quotient_c 	: std_logic_vector (DIVIDEND_WIDTH - 1 downto 0) := (Others => '0');
 	signal remainder_c		: std_logic_vector (DIVISOR_WIDTH - 1 downto 0) := (Others => '0');
 	signal overflow_c, temp_overflow : std_logic;
-	signal divider_done_c : std_logic;
+	signal divider_done_c, divider_done_signal : std_logic;
 --	----- get_msb_pos using for-loop alternate ---
 --	function get_msb_pos(signal input_vector: std_logic_vector;size: integer)
 --	  return integer is
@@ -95,7 +90,7 @@ architecture fsm_behavior of divider is
 	end function get_msb_pos;
 
 begin
-
+	divider_done <= divider_done_signal;
 	clocked_process: process(clk, reset, start)
 	begin
 		if (reset = '1') then
@@ -105,7 +100,7 @@ begin
 			temp_remainder <= (others => '0');
 			temp_overflow <= '0';
 			state <= idle;
-			divider_done <= '0';
+			divider_done_signal <= '0';
 		elsif (start = '1') then
 				temp_divisor <= (others => '0');
 				temp_dividend <= (others => '0');
@@ -113,7 +108,7 @@ begin
 				temp_remainder <= (others => '0');
 				temp_overflow <= '0';
 				state <= init;
-				divider_done <= '0';
+				divider_done_signal <= '0';
 
 		elsif (rising_edge(clk)) then
 				temp_dividend <= dividend_c;
@@ -122,7 +117,7 @@ begin
 				temp_overflow <= overflow_c;
 				temp_remainder <= remainder_c;
 				state <= next_state;
-				divider_done <= divider_done_c;
+				divider_done_signal <= divider_done_c;
 		end if;
 			quotient <= temp_quotient;
 			remainder <= temp_remainder;
@@ -142,7 +137,7 @@ begin
 		quotient_c <= temp_quotient;
 		remainder_c <= temp_remainder;
 		overflow_c <= temp_overflow;
-		divider_done_c <= divider_done;
+		divider_done_c <= divider_done_signal;
 		var_dividend := to_integer(unsigned(temp_dividend));
 		var_divisor := to_integer(unsigned(temp_divisor));
 

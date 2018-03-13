@@ -1,14 +1,13 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
-use WORK.divider_const.all;
 
 entity demodulation is
 generic (
-  QUANT_VAL : integer := 10 --to_integer(to_signed('1', 32) sll 10);
+  QUANT_VAL : integer := 10; --to_integer(to_signed('1', 32) sll 10);
   gain : integer := 1;
-  quad1 --PI/4
-  quad3 --3*PI/4
+  quad1 : std_logic_vector(31 downto 0) := (others => '0'); -- PI/4 in quantized, look for it in c code
+  quad3 : std_logic_vector(31 downto 0) := (others => '0')--3*PI/4
 );
 port (
   clock : in std_logic;
@@ -22,7 +21,6 @@ port (
   fifo_in_rd_en : in std_logic;
   fifo_out_wr_en : out std_logic;
   fifo_out_full : out std_logic
-  -- NEED TO SHIFT REAL_PREV AND IMAG_PREV OUTSIDE OF THIS FUNCTION CALL
 );
 end entity demodulation;
 
