@@ -101,7 +101,7 @@ begin
 			while ( true ) loop
 				
 				--read( mem_in_file, char );
-				din <= std_logic_vector(to_unsigned(20, 10));
+				din <= std_logic_vector(to_unsigned(2000, 10));
 				wait until ( (clock = '0') and (full = '0') );
 				wr_en <= '1';
 				wait until (clock = '1');

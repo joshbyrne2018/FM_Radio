@@ -105,7 +105,7 @@ begin
   );
 
   FIR_unit : FIR_decimation generic map(
-	DECIMATION => 1,
+	DECIMATION => 4,
 	QUANT_VAL => 10,
 	Taps => 8,
 	ValSize  => 10,

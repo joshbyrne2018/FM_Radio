@@ -27,13 +27,16 @@ signal write_en : out std_logic
 end fir_decimation;
 
 architecture behavior of fir_decimation is
-type states is (s0,s1,s2,s3);
-signal state, next_state : states := s0;
+type states is (s0,s1,s2,s3,sI);
+signal state, next_state : states := sI;
 type Buff is array (Taps-1 downto 0) of std_logic_vector(ValSize - 1 downto 0);
-signal X_buffer, X_temp : Buff;
-signal y, y_next,y_temp : std_logic_vector (ValSize-1 downto 0);
-signal state_one_counter : integer := DECIMATION-1;
+signal X_buffer, X_temp, X_buffer_next,X_temp_next : Buff;
+signal y, y_next,y_out_next : std_logic_vector (ValSize-1 downto 0);
 signal read_next, write_next : std_logic;
+signal state_one_counter,state_one_counter_next : integer;
+signal state_two_counter,state_two_counter_next : integer;
+signal state_zero_counter,state_zero_counter_next : integer; 
+signal ready : std_logic;
 
 function DEQUANTIZE (val_in : std_logic_vector(31 downto 0))
   return std_logic_vector is
@@ -52,61 +55,78 @@ end QUANTIZE;
 
 begin
 
-fir_fsm_process : process(empty_in, state, full_out, y, x_buffer)
+fir_fsm_process : process(empty_in, state, full_out, y, X_buffer, X_temp, state_one_counter,state_two_counter,state_zero_counter)
+
+
 begin
 
 next_state <= state;
 
 case (state) is
+	when sI => 
+		if (ready = '1') then
+			next_state <= s0;
+			state_zero_counter_next <= Taps - DECIMATION - 1;
+			X_buffer_next <= (others => (others => '0'));
+			X_temp_next <= (others => (others => '0'));
+		else
+			next_state <= sI;
+		end if;
 	
 	when s0 =>
-	--y_out <= "1111111111";
-	for I in (Taps-DECIMATION-1) downto 0 loop
-	X_temp(I+DECIMATION) <= X_buffer(I);
-	end loop;
-	
-	X_buffer <= X_temp;
-	read_next <= '1';
-	state_one_counter <= DECIMATION -1;
-	next_state <= s1;
-	
+		X_temp_next(state_zero_counter + DECIMATION) <= X_buffer(state_zero_counter);
+		write_next <= '0';
+		if (state_zero_counter > 0) then
+			next_state <= s0;
+			state_zero_counter_next <= state_zero_counter - 1;
+			
+			read_next <= '0';
+		else
+			next_state <= s1;
+			state_zero_counter_next <= Taps - DECIMATION - 1;
+			X_buffer_next <= X_temp;
+			read_next <= '1';
+			state_one_counter_next <= DECIMATION -1;
+		end if;
 	
 	when s1 =>
 		
-	if (empty_in = '0') then
-		--y_out <= "0101010101";
-		X_buffer(state_one_counter) <= x_in;
-		if (state_one_counter = 0) then
-		
-			next_state <= s2;
-			state_one_counter <= DECIMATION -1;
-			read_next <= '0';
-			
-		else
+		if (empty_in = '0') then
+			X_buffer_next(state_one_counter) <= x_in;
+			if (state_one_counter = 0) then
+				next_state <= s2;
+				state_one_counter_next <= DECIMATION -1;
+				read_next <= '0';
+				state_two_counter_next <= 0;
+				y_next <=  (others => '0');
+				
+			else
+				next_state <= s1;
+				state_one_counter_next <= state_one_counter -1;
+				read_next <= '1';
+				
+			end if;
+		else 
 			next_state <= s1;
-			state_one_counter <= state_one_counter -1;
 			read_next <= '1';
-			
-		end if;
-	else 
-		next_state <= s1;
-		read_next <= '1';
-	end if; 
-	
+		end if; 
+		
 	when s2 =>
-	y_temp <= "0000000000";
-	for I in 0 to Taps-1 loop
-	
-	y_next <=  std_logic_vector(signed(y_temp) + signed(DEQUANTIZE(std_logic_vector(to_signed(coeff(Taps - I - 1),10)*signed(X_buffer(I)))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
-
-	y_temp <= y_next;
-	end loop;
-	next_state <= s3;
+		y_next <= std_logic_vector(resize(signed(y) + (signed(DEQUANTIZE(std_logic_vector(resize(coeff(Taps - state_two_counter - 1)*signed(X_buffer(state_two_counter)),32))))),10)); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+	if (state_two_counter < Taps - 1) then
+		next_state <= s2;
+		state_two_counter_next <= state_two_counter + 1;
+		
+	else 
+		next_state <= s3;
+		state_two_counter_next <= 0;
+	end if;
 	
 	when s3 =>
 	if(full_out = '0') then
-		y_out <= y;
-		write_en <= '1';
+		y_out_next <= y;
+		write_next <= '1';
+		next_state <= s0;
 	end if;
 	when OTHERS =>
 	next_state <= s0;
@@ -121,15 +141,27 @@ begin
 if (reset = '1') then
 y <= (others => '0');
 X_buffer <= (others => (others => '0'));
-state <= s0;
+X_temp <= (others => (others => '0'));
+state <= sI;
 read_en <= '0';
 write_en <= '0';
-read_next <= '0';
-write_next <= '0';
+state_one_counter <= DECIMATION - 1;
+state_two_counter <= 0;
+state_zero_counter <= Taps - DECIMATION - 1;
+y_out <= (others => '0');
+ready <= '1';
+
 elsif (rising_edge(clock)) then
 state <= next_state;
+y_out <= y_out_next;
 y <= y_next;
 read_en <= read_next;
+write_en <= write_next;
+X_buffer <= X_buffer_next; 
+X_temp <= X_temp_next;
+state_one_counter <= state_one_counter_next;
+state_two_counter <= state_two_counter_next;
+state_zero_counter <= state_zero_counter_next;
 end if;
 end process fir_reg_process;
 
