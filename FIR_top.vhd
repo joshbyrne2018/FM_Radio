@@ -9,10 +9,10 @@ entity FIR_top is
 port (
   signal clock : in std_logic;
   signal reset : in std_logic;
-  signal input_fifo_din : in std_logic_vector(9 downto 0);
+  signal input_fifo_din : in std_logic_vector(31 downto 0);
   signal input_wr_en : in std_logic;
   signal input_fifo_full : out std_logic;
-  signal output_fifo_dout : out std_logic_vector(9 downto 0);
+  signal output_fifo_dout : out std_logic_vector(31 downto 0);
   signal output_fifo_empty : out std_logic;
   signal output_rd_en : in std_logic
 );
@@ -25,7 +25,7 @@ architecture structural of FIR_top is
   component fifo is
   generic
   (
-  	constant FIFO_DATA_WIDTH : integer := 10;
+  	constant FIFO_DATA_WIDTH : integer := 32;
   	constant FIFO_BUFFER_SIZE : integer := 32
   );
   port
@@ -46,34 +46,34 @@ component FIR_decimation is
 generic(
 	constant DECIMATION : integer := 1;
 	constant QUANT_VAL : integer := 10;
-	constant Taps : integer := 8;
-	constant ValSize : integer := 10;
+	constant Taps : integer := 83;
+	constant ValSize : integer := 32;
 	constant Coeff : CoArray
 );
 port(
   signal clock : in std_logic;
   signal reset : in std_logic;
-  signal x_in : in std_logic_vector(9 downto 0);
+  signal x_in : in std_logic_vector(31 downto 0);
   signal empty_in : in std_logic;
   signal read_en : out std_logic;
-  signal y_out : out std_logic_vector(9 downto 0);
+  signal y_out : out std_logic_vector(31 downto 0);
   signal full_out : in std_logic;
   signal write_en : out std_logic
   );
 end component FIR_decimation;
 
 signal FIR_wr_en : std_logic;
-signal FIR_din : std_logic_vector(9 downto 0);
+signal FIR_din : std_logic_vector(31 downto 0);
 signal FIR_empty : std_logic;
 signal FIR_full : std_logic;
-signal FIR_dout : std_logic_vector(9 downto 0);
+signal FIR_dout : std_logic_vector(31 downto 0);
 signal FIR_rd_en : std_logic;
 
 begin
 
   input_fifo : fifo generic map(
-  FIFO_DATA_WIDTH => 10,
-  FIFO_BUFFER_SIZE => 10
+  FIFO_DATA_WIDTH => 32,
+  FIFO_BUFFER_SIZE => 32
   )
   port map(
   rd_clk => clock,
@@ -89,8 +89,8 @@ begin
 
 
   output_fifo : fifo generic map(
-  FIFO_DATA_WIDTH => 10,
-  FIFO_BUFFER_SIZE => 10
+  FIFO_DATA_WIDTH => 32,
+  FIFO_BUFFER_SIZE => 32
   )
   port map(
   rd_clk => clock,
@@ -105,11 +105,14 @@ begin
   );
 
   FIR_unit : FIR_decimation generic map(
-	DECIMATION => 4,
+	DECIMATION => 8,
 	QUANT_VAL => 10,
-	Taps => 8,
-	ValSize  => 10,
-	Coeff => (1,2,3,4,5,6,7,8)
+	Taps => 32,
+	ValSize  => 32,
+	Coeff => (x"FFFFFFFD", x"FFFFFFFA", x"FFFFFFF4", x"FFFFFFED", x"FFFFFFE5", x"FFFFFFDF", x"FFFFFFE2", x"FFFFFFF3", 
+	x"00000015", x"0000004E", x"0000009B", x"000000F9", x"0000015D", x"000001BE", x"0000020E", x"00000243", 
+	x"00000243", x"0000020E", x"000001BE", x"0000015D", x"000000F9", x"0000009B", x"0000004E", x"00000015", 
+	x"FFFFFFF3", x"FFFFFFE2", x"FFFFFFDF", x"FFFFFFE5", x"FFFFFFEd", x"FFFFFFF4", x"FFFFFFFA", x"FFFFFFFD")
   )
   port map(
   clock => clock,

@@ -11,8 +11,8 @@ generic(
 constant DECIMATION : integer := 1;
 constant QUANT_VAL : integer := 10;
 constant Taps : integer := 8;
-constant ValSize : integer := 10;
-constant Coeff : CoArray(0 to 7) := (1,2,3,4,5,6,7,8)
+constant ValSize : integer := 32;
+constant Coeff : CoArray(0 to 31) := (others => (others => '0'))
 );
 port(
 signal clock : in std_logic;
@@ -44,6 +44,12 @@ begin
   return std_logic_vector(shift_right(unsigned(val_in),QUANT_VAL));
 end DEQUANTIZE;
 
+function DEQUANTIZE_64 (val_in : std_logic_vector(63 downto 0))
+  return std_logic_vector is
+begin
+  return std_logic_vector(to_signed((to_integer(signed(val_in(31 downto 0))) / to_integer((shift_left(to_signed(1, 32), QUANT_VAL)))), 32));
+end DEQUANTIZE_64;
+
 function QUANTIZE (val_in : std_logic_vector(31 downto 0))
   return std_logic_vector is
 begin
@@ -61,26 +67,39 @@ fir_fsm_process : process(empty_in, state, full_out, y, X_buffer, X_temp, state_
 begin
 
 next_state <= state;
+X_buffer_next <= X_buffer;
+X_temp_next <= X_temp;
+state_one_counter_next <= state_one_counter;
+state_two_counter_next <= state_two_counter;
+state_zero_counter_next <= state_zero_counter;
+y_next <= y;
 
 case (state) is
 	when sI => 
-		if (ready = '1') then
-			next_state <= s0;
-			state_zero_counter_next <= Taps - DECIMATION - 1;
+			write_next <= '0';
+			state_one_counter_next <= DECIMATION -1;
 			X_buffer_next <= (others => (others => '0'));
 			X_temp_next <= (others => (others => '0'));
+		if (ready = '1') then
+			next_state <= s1;
+			read_next <= '1';
 		else
 			next_state <= sI;
+			read_next <= '0';		
 		end if;
 	
 	when s0 =>
-		X_temp_next(state_zero_counter + DECIMATION) <= X_buffer(state_zero_counter);
 		write_next <= '0';
-		if (state_zero_counter > 0) then
+		if (state_zero_counter >= 0) then
+			X_temp_next(state_zero_counter + DECIMATION) <= X_buffer(state_zero_counter);
 			next_state <= s0;
 			state_zero_counter_next <= state_zero_counter - 1;
-			
-			read_next <= '0';
+			X_buffer_next <= X_buffer;
+			if(state_zero_counter > (Taps - DECIMATION - 1 - (DECIMATION -1 ))) then
+				read_next <= '1';
+			else
+				read_next <= '0';
+			end if;
 		else
 			next_state <= s1;
 			state_zero_counter_next <= Taps - DECIMATION - 1;
@@ -112,7 +131,7 @@ case (state) is
 		end if; 
 		
 	when s2 =>
-		y_next <= std_logic_vector(resize(signed(y) + (signed(DEQUANTIZE(std_logic_vector(resize(coeff(Taps - state_two_counter - 1)*signed(X_buffer(state_two_counter)),32))))),10)); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+		y_next <= std_logic_vector(signed(y) + (signed(DEQUANTIZE_64(std_logic_vector(signed(coeff(Taps - state_two_counter - 1))*signed(X_buffer(state_two_counter))))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
 	if (state_two_counter < Taps - 1) then
 		next_state <= s2;
 		state_two_counter_next <= state_two_counter + 1;
@@ -127,6 +146,10 @@ case (state) is
 		y_out_next <= y;
 		write_next <= '1';
 		next_state <= s0;
+		state_zero_counter_next <= Taps - DECIMATION - 1;
+	else 
+		write_next <= '0';
+		next_state <= s3;
 	end if;
 	when OTHERS =>
 	next_state <= s0;
@@ -149,9 +172,10 @@ state_one_counter <= DECIMATION - 1;
 state_two_counter <= 0;
 state_zero_counter <= Taps - DECIMATION - 1;
 y_out <= (others => '0');
-ready <= '1';
+ready <= '0';
 
 elsif (rising_edge(clock)) then
+ready <= '1';
 state <= next_state;
 y_out <= y_out_next;
 y <= y_next;

@@ -5,6 +5,6 @@ use IEEE.numeric_std.all;
 
 package CoArray_pkg is
 
-     type CoArray is array (integer range 0 to 7) of integer;
+     type CoArray is array (integer range <>) of std_logic_vector (31 downto 0);
 
 end package CoArray_pkg;

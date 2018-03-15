@@ -19,8 +19,8 @@ signal clock : std_logic:= '1';
 signal reset : std_logic:= '0';
 
 --memory ports
-signal din: std_logic_vector(9 downto 0) := "0000000000";
-signal dout: std_logic_vector(9 downto 0) := "0000000000";
+signal din: std_logic_vector(31 downto 0) := x"00000000";
+signal dout: std_logic_vector(31 downto 0) := x"00000000";
 signal full : std_logic;
 signal empty : std_logic;
 signal wr_en : std_logic;
@@ -42,8 +42,8 @@ port(
   signal reset : in std_logic;
   signal input_wr_en : in std_logic;
   signal output_rd_en : in std_logic;
-  signal input_fifo_din : in std_logic_vector(9 downto 0);
-  signal output_fifo_dout : out std_logic_vector(9 downto 0);
+  signal input_fifo_din : in std_logic_vector(31 downto 0);
+  signal output_fifo_dout : out std_logic_vector(31 downto 0);
   signal output_fifo_empty : out std_logic;
   signal input_fifo_full : out std_logic
 );
@@ -101,8 +101,43 @@ begin
 			while ( true ) loop
 				
 				--read( mem_in_file, char );
-				din <= std_logic_vector(to_unsigned(2000, 10));
-				wait until ( (clock = '0') and (full = '0') );
+				din <= x"000004A6";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"000004A6";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"00000696";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"FFFFFB5A";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"FFFFFC84";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"000007D8";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"00000900";
+				wait until ( (clock = '0') and (full = '0'));
+				wr_en <= '1';
+				wait until (clock = '1');
+				wr_en <= '0';
+				din <= x"0000073E";
+				wait until ( (clock = '0') and (full = '0'));
 				wr_en <= '1';
 				wait until (clock = '1');
 				wr_en <= '0';
@@ -118,11 +153,11 @@ begin
 		--type raw_file is file of character;
 		--file mem_out_file : raw_file open write_mode is OUT_NAME; --need to create output file and input name
 		variable errors : integer := 0;
-		variable data_cmp : std_logic_vector(9 downto 0);
-		variable data_read : std_logic_vector(9 downto 0);
+		variable data_cmp : std_logic_vector(31 downto 0);
+		variable data_read : std_logic_vector(31 downto 0);
 		variable z : integer := 0;
 		variable ln3 : line;
-		variable char : std_logic_vector(9 downto 0);
+		variable char : std_logic_vector(31 downto 0);
 		
 		begin
 			--file_open( out_file, OUT_NAME, read_mode);
