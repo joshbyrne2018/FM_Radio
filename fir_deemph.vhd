@@ -10,16 +10,15 @@ entity fir_deemph is
 generic(
 constant DECIMATION : integer := 1;
 constant QUANT_VAL : integer := 10;
-constant Taps : integer := 8;
-constant ValSize : integer := 10;
-constant X_Coeff: CoArray;
-constant Y_Coeff: CoArray
+constant Taps : integer := 2;
+constant ValSize : integer := 32;
+constant Coeff,Coeff_Y : CoArray(0 to 1) := (others => (others => '0'))
 );
 port(
 signal clock : in std_logic;
 signal reset : in std_logic;
 signal empty_in : in std_logic;
-signal full_in : in std_logic;
+signal full_out : in std_logic;
 signal x_in : in std_logic_vector(ValSize-1 downto 0);
 signal y_out : out std_logic_vector(ValSize-1 downto 0);
 signal read_en : out std_logic;
@@ -27,20 +26,30 @@ signal write_en : out std_logic
 );
 end fir_deemph;
 
-architecture behavior of fir_decimation is
-type states is (s0,s1,s2,s3,s4);
-signal state, next_state : states := s0;
+architecture behavior of fir_deemph is
+type states is (s0,s1,sY,s2,s3,sI);
+signal state, next_state : states := sI;
 type Buff is array (Taps-1 downto 0) of std_logic_vector(ValSize - 1 downto 0);
-signal X_buffer, X_temp,Y_buffer, Y_buf_temp : Buff;
-signal y, y_next,y_temp, y_temp_b : std_logic_vector (ValSize-1 downto 0);
-signal state_one_counter : integer := DECIMATION-1;
+signal X_buffer, X_temp, X_buffer_next,X_temp_next, Y_buffer, Y_temp, Y_buffer_next,Y_temp_next  : Buff;
+signal y1, y2, y1_next, y2_next, y_out_next : std_logic_vector (ValSize-1 downto 0);
 signal read_next, write_next : std_logic;
+signal state_one_counter,state_one_counter_next : integer;
+signal state_two_counter,state_two_counter_next : integer;
+signal state_zero_counter,state_zero_counter_next : integer; 
+signal state_y_counter,state_y_counter_next : integer; 
+signal ready : std_logic;
 
 function DEQUANTIZE (val_in : std_logic_vector(31 downto 0))
   return std_logic_vector is
 begin
   return std_logic_vector(shift_right(unsigned(val_in),QUANT_VAL));
 end DEQUANTIZE;
+
+function DEQUANTIZE_64 (val_in : std_logic_vector(63 downto 0))
+  return std_logic_vector is
+begin
+  return std_logic_vector(to_signed((to_integer(signed(val_in(31 downto 0))) / to_integer((shift_left(to_signed(1, 32), QUANT_VAL)))), 32));
+end DEQUANTIZE_64;
 
 function QUANTIZE (val_in : std_logic_vector(31 downto 0))
   return std_logic_vector is
@@ -51,66 +60,167 @@ end QUANTIZE;
 
 
 
+begin
+
+fir_deemph_fsm_process : process(empty_in, state, full_out, y1,y2, X_buffer, X_temp, state_one_counter,state_two_counter,state_zero_counter)
 
 
 begin
 
-fir_fsm_process : process(state)
-begin
+next_state <= state;
+X_buffer_next <= X_buffer;
+X_temp_next <= X_temp;
+Y_buffer_next <= Y_buffer;
+Y_temp_next <= Y_temp;
+state_one_counter_next <= state_one_counter;
+state_two_counter_next <= state_two_counter;
+state_zero_counter_next <= state_zero_counter;
+state_y_counter_next <= state_y_counter;
+y1_next <= y1;
+y2_next <= y2;
 
 case (state) is
+	when sI => 
+			write_next <= '0';
+			state_one_counter_next <= DECIMATION -1;
+			X_buffer_next <= (others => (others => '0'));
+			X_temp_next <= (others => (others => '0'));
+			Y_buffer_next <= (others => (others => '0'));
+			Y_temp_next <= (others => (others => '0'));
+		if (ready = '1') then
+			next_state <= s1;
+			read_next <= '1';
+		else
+			next_state <= sI;
+			read_next <= '0';		
+		end if;
+	
 	when s0 =>
-	for I in (Taps-DECIMATION-1) downto 0 loop
-	X_temp(I+DECIMATION) <= X_buffer(I);
-	end loop;
-	X_buffer <= X_temp;
-	read_next <= '1';
-	next_state <= s1;
+		write_next <= '0';
+		if (state_zero_counter >= 0) then
+			X_temp_next(state_zero_counter + DECIMATION) <= X_buffer(state_zero_counter);
+			next_state <= s0;
+			state_zero_counter_next <= state_zero_counter - 1;
+			X_buffer_next <= X_buffer;
+			if(state_zero_counter > (Taps - DECIMATION - 1 - (DECIMATION -1 ))) then
+				read_next <= '1';
+			else
+				read_next <= '0';
+			end if;
+		else
+			next_state <= s1;
+			state_zero_counter_next <= Taps - DECIMATION - 1;
+			X_buffer_next <= X_temp;
+			read_next <= '1';
+			state_one_counter_next <= DECIMATION -1;
+		end if;
+	
 	when s1 =>
-	X_buffer(state_one_counter) <= x_in;
-	if (state_one_counter = 0) then
-	next_state <= s2;
-	state_one_counter <= DECIMATION -1;
-	read_next <= '0';
-	else
-	next_state <= s1;
-	state_one_counter <= state_one_counter -1;
-	read_next <= '1';
-	end if;
+		
+		if (empty_in = '0') then
+			X_buffer_next(state_one_counter) <= x_in;
+			if (state_one_counter = 0) then
+				next_state <= sY;
+				state_one_counter_next <= DECIMATION -1;
+				read_next <= '0';
+				state_y_counter_next <= Taps -1;
+				
+			else
+				next_state <= s1;
+				state_one_counter_next <= state_one_counter -1;
+				read_next <= '1';
+				
+			end if;
+		else 
+			next_state <= s1;
+			read_next <= '1';
+		end if; 
+
+
+
+
+
+---HERE'S THE CHANGES
+	when sY =>
+
+		if (state_y_counter <= 0) then
+			next_state <= s2;
+			state_y_counter_next <= Taps - 1;
+		else
+			Y_buffer_next(state_y_counter) <= Y_buffer(state_y_counter - 1);
+			next_state <= s2;
+			state_y_counter_next <= state_y_counter - 1;
+			state_two_counter_next <= 0;
+			y1_next <= (others => '0');
+			y2_next <= (others => '0');
+		end if;
+
 	when s2 =>
-	for I in Taps-1 downto 0 loop
-	Y_buffer(I) <= Y_buffer(I-1);
-	end loop;
+		y1_next <= std_logic_vector(signed(y1) + (signed(DEQUANTIZE_64(std_logic_vector(signed(coeff(state_two_counter))*signed(X_buffer(state_two_counter))))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
+		y2_next <= std_logic_vector(signed(y2) + (signed(DEQUANTIZE_64(std_logic_vector(signed(coeff_Y(state_two_counter))*signed(Y_buffer(state_two_counter)))))));
+	if (state_two_counter < Taps - 1) then
+		next_state <= s2;
+		state_two_counter_next <= state_two_counter + 1;
+		
+	else 
+		next_state <= s3;
+		state_two_counter_next <= 0;
+	end if;
+	
 	when s3 =>
-	for I in 0 to Taps-1 loop
-	y_temp <=  std_logic_vector(signed(y_temp) + signed(DEQUANTIZE(std_logic_vector(X_Coeff(Taps - I - 1)*signed(X_buffer(I)))))); --THIS IS PLACEHOLDER TO ADD IN ACTUAL DEQUANTIZE FUNCTION	
-	y_temp_b <=  std_logic_vector(signed(y_temp_b) + signed(DEQUANTIZE(std_logic_vector(Y_Coeff(Taps - I - 1)*signed(Y_buffer(I))))));
-	end loop;
-	y_next <= y_temp + y_temp_b;
-	next_state <= s4;
-	when s4 =>
-	y_out <= y;
-	write_en <= '1';
+	if(full_out = '0') then
+		Y_buffer_next(0) <= std_logic_vector(signed(y1)+ signed(y2));
+		y_out_next <= y_buffer(Taps-1);
+		write_next <= '1';
+		next_state <= s0;
+		state_zero_counter_next <= Taps - DECIMATION - 1;
+	else 
+		write_next <= '0';
+		next_state <= s3;
+	end if;
 	when OTHERS =>
 	next_state <= s0;
 
 end case;
 
 
-end process fir_fsm_process;
+end process fir_deemph_fsm_process;
 
-fir_reg_process : process(reset,clock)
+fir_deemph_reg_process : process(reset,clock)
 begin
 if (reset = '1') then
-y <= (others => '0');
+y1 <= (others => '0');
+y2 <= (others => '0');
 X_buffer <= (others => (others => '0'));
-state <= s0;
+X_temp <= (others => (others => '0'));
+state <= sI;
+read_en <= '0';
+write_en <= '0';
+state_one_counter <= DECIMATION - 1;
+state_two_counter <= 0;
+state_zero_counter <= Taps - DECIMATION - 1;
+state_y_counter <= Taps - 1;
+y_out <= (others => '0');
+ready <= '0';
+
 elsif (rising_edge(clock)) then
+ready <= '1';
 state <= next_state;
-y <= y_next;
+y_out <= y_out_next;
+y1<= y1_next;
+y2<= y2_next;
 read_en <= read_next;
+write_en <= write_next;
+X_buffer <= X_buffer_next; 
+X_temp <= X_temp_next;
+Y_buffer <= Y_buffer_next; 
+Y_temp <= Y_temp_next;
+state_one_counter <= state_one_counter_next;
+state_two_counter <= state_two_counter_next;
+state_zero_counter <= state_zero_counter_next;
+state_y_counter <= state_y_counter_next;
 end if;
-end process fir_reg_process;
+end process fir_deemph_reg_process;
 
 
 
